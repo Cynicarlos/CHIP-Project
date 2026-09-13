@@ -11,7 +11,71 @@ HPO 规则匹配 + 训练集表面别名
 
 任务 1 的实体和 HPO ID 由规则及缩写模块生成；任务 2 使用 Qwen 预测患者归属。任务 2 的 Qwen 候选保持训练时的严格匹配分布，推理后再用归一化实体做同句近距离高置信补回。当前固定验证集 score 为 `0.6852823235613918`，最终 A 榜文件为 `experiments/predictions/E47-final-A.jsonl`。
 
-## 1. 文件和环境
+## 1. 复现实验准备
+
+以下步骤应在项目根目录执行。项目不依赖固定的机器路径，模型缓存统一放在项目根目录下的 `model_cache/`，该目录已加入 `.gitignore`。
+
+### 1.1 获取代码和 LoRA 权重
+
+如果是从 GitHub 重新获取项目，需要安装 Git LFS，并拉取仓库中的 LoRA 权重：
+
+```bash
+git lfs install
+git lfs pull
+```
+
+如果当前目录已经是本项目，直接进入项目根目录即可：
+
+```bash
+cd PatientPheX-V1-A
+```
+
+### 1.2 创建 Python 环境并安装依赖
+
+代码需要 Python 3.10 或更高版本。训练和 Qwen 推理需要 NVIDIA GPU、可用 CUDA 环境以及与 CUDA 匹配的 PyTorch：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-lora.txt
+```
+
+检查依赖和代码：
+
+```bash
+python -m py_compile patientphex/*.py
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+```
+
+若 `torch.cuda.is_available()` 为 `False`，仍可运行规则方法，但不能运行 QLoRA 训练和 GPU 推理。
+
+### 1.3 设置项目内模型缓存
+
+先从项目根目录解析路径并设置 Hugging Face 镜像与缓存。后续训练、推理命令默认复用这些环境变量：
+
+```bash
+export PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+export HF_HOME="${PROJECT_ROOT}/model_cache/huggingface"
+export HF_HUB_CACHE="${HF_HOME}/hub"
+export TRANSFORMERS_CACHE="${HF_HUB_CACHE}"
+export HF_ENDPOINT="https://hf-mirror.net"
+mkdir -p "${HF_HUB_CACHE}"
+```
+
+如果基础模型尚未下载，使用镜像执行：
+
+```bash
+HF_HUB_OFFLINE=0 python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-8B')"
+```
+
+模型下载完成后，建议切换为离线模式，避免实验过程中重复访问网络：
+
+```bash
+export HF_HUB_OFFLINE=1
+```
+
+## 2. 项目结构
 
 主要代码和数据如下：
 
@@ -24,40 +88,7 @@ HPO 规则匹配 + 训练集表面别名
 - `experiments/models/`：E18 本地 adapter 和 E21 全量 adapter。
 - `experiments/predictions/`：当前最优验证集和 A 榜输出，分别为 `E41-plural-qwen-post-valid.jsonl` 和 `E47-final-A.jsonl`。
 
-安装依赖并检查代码：
-
-```bash
-python -m pip install -r requirements-lora.txt
-python -m py_compile patientphex/*.py
-```
-
-两个 LoRA 权重通过 Git LFS 管理。首次 clone 后执行：
-
-```bash
-git lfs install
-git lfs pull
-```
-
-如果只需要运行规则代码或重新训练 adapter，也可以不下载 LFS 权重；执行 Qwen 推理前需要确保对应 adapter 权重已存在。
-
-模型下载使用镜像，训练和推理使用本地缓存：
-
-```bash
-export HF_HOME=/data3/chenxianmin/model_cache/huggingface
-export TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub
-export HF_ENDPOINT=https://hf-mirror.net
-export HF_HUB_OFFLINE=1
-```
-
-如果 Qwen3-8B 尚未缓存，先执行：
-
-```bash
-HF_HUB_OFFLINE=0 HF_ENDPOINT=https://hf-mirror.net \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-8B')"
-```
-
-## 2. 固定本地验证集
+## 3. 固定本地验证集
 
 按整篇文献划分，避免同一篇文献同时出现在训练和验证中：
 
@@ -72,7 +103,7 @@ python -m patientphex split \
 
 结果应为 64 篇训练文献和 16 篇验证文献。若已有 `splits/train.jsonl` 和 `splits/valid.jsonl`，无需重复划分。
 
-## 3. 构造任务 2 训练数据
+## 4. 构造任务 2 训练数据
 
 本地验证和最终训练都使用同 passage 候选：
 
@@ -98,15 +129,15 @@ python -m patientphex build-task2 \
 
 默认候选使用严格 HPO token 匹配，以保持 E18/E21 adapter 的训练分布；复数和英美拼写归一化只在最终任务 1 输出及任务 2 的高置信后处理中启用。
 
-## 4. 训练和评估本地 Qwen adapter
+## 5. 训练和评估本地 Qwen adapter
 
 训练 E18：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora train \
   --data splits/task2-local-sft.jsonl \
   --model Qwen/Qwen3-8B \
@@ -127,8 +158,8 @@ python -m patientphex.qwen_lora train \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input splits/valid.jsonl \
   --output experiments/predictions/E40-strict-qwen-enhanced-post-valid.jsonl \
@@ -173,15 +204,15 @@ python -m patientphex evaluate \
 }
 ```
 
-## 5. 全量训练并生成 A 榜文件
+## 6. 全量训练并生成 A 榜文件
 
 训练 E21：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora train \
   --data task2-local-sft.jsonl \
   --model Qwen/Qwen3-8B \
@@ -202,8 +233,8 @@ python -m patientphex.qwen_lora train \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input PatientPheX-A.jsonl \
   --output experiments/predictions/E46-full-qwen-enhanced-post-A.jsonl \
@@ -238,15 +269,15 @@ python -m patientphex validate \
 
 当前 A 榜输出为 20 篇文献、1226 个实体和 344 个 phenotype 值。A 榜没有本地金标准，不能计算 score。
 
-## 6. B 榜
+## 7. B 榜
 
 B 榜文件开放后，替换输入文件即可。先用 E21 adapter 生成任务 2 关联，再生成最终提交：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input PatientPheX-B.jsonl \
   --output experiments/predictions/E21-qwen-B-enhanced-post.jsonl \

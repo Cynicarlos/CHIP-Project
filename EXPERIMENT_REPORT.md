@@ -360,20 +360,23 @@ python -m pip install -r requirements-lora.txt
 python -m py_compile patientphex/*.py
 ```
 
-模型下载使用 Hugging Face 镜像，训练和推理使用本地缓存：
+所有命令均在项目根目录执行。模型下载使用 Hugging Face 镜像，训练和推理使用项目根目录下的本地缓存：
 
 ```bash
-export HF_HOME=/data3/chenxianmin/model_cache/huggingface
-export TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub
-export HF_ENDPOINT=https://hf-mirror.net
+export PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+export HF_HOME="${PROJECT_ROOT}/model_cache/huggingface"
+export HF_HUB_CACHE="${HF_HOME}/hub"
+export TRANSFORMERS_CACHE="${HF_HUB_CACHE}"
+export HF_ENDPOINT="https://hf-mirror.net"
 export HF_HUB_OFFLINE=1
+mkdir -p "${HF_HUB_CACHE}"
 ```
 
 如果 `Qwen/Qwen3-8B` 尚未缓存，执行：
 
 ```bash
-HF_HUB_OFFLINE=0 HF_ENDPOINT=https://hf-mirror.net \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
+HF_HUB_OFFLINE=0 \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
 python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-8B')"
 ```
 
@@ -406,8 +409,8 @@ python -m patientphex build-task2 \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora train \
   --data splits/task2-local-sft.jsonl \
   --model Qwen/Qwen3-8B \
@@ -428,8 +431,8 @@ python -m patientphex.qwen_lora train \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input splits/valid.jsonl \
   --output experiments/predictions/E40-strict-qwen-enhanced-post-valid.jsonl \
@@ -480,8 +483,8 @@ python -m patientphex build-task2 \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora train \
   --data task2-local-sft.jsonl \
   --model Qwen/Qwen3-8B \
@@ -502,8 +505,8 @@ python -m patientphex.qwen_lora train \
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input PatientPheX-A.jsonl \
   --output experiments/predictions/E46-full-qwen-enhanced-post-A.jsonl \
@@ -543,8 +546,8 @@ B 榜文件开放后，将 A 榜输入替换为 `PatientPheX-B.jsonl`，使用 E
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 HF_HUB_OFFLINE=1 \
-HF_HOME=/data3/chenxianmin/model_cache/huggingface \
-TRANSFORMERS_CACHE=/data3/chenxianmin/model_cache/huggingface/hub \
+HF_HOME="${PROJECT_ROOT}/model_cache/huggingface" \
+TRANSFORMERS_CACHE="${PROJECT_ROOT}/model_cache/huggingface/hub" \
 python -m patientphex.qwen_lora predict \
   --input PatientPheX-B.jsonl \
   --output experiments/predictions/E21-qwen-B-enhanced-post.jsonl \
