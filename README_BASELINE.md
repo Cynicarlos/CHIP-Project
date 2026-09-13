@@ -31,6 +31,15 @@ python -m pip install -r requirements-lora.txt
 python -m py_compile patientphex/*.py
 ```
 
+两个 LoRA 权重通过 Git LFS 管理。首次 clone 后执行：
+
+```bash
+git lfs install
+git lfs pull
+```
+
+如果只需要运行规则代码或重新训练 adapter，也可以不下载 LFS 权重；执行 Qwen 推理前需要确保对应 adapter 权重已存在。
+
 模型下载使用镜像，训练和推理使用本地缓存：
 
 ```bash
